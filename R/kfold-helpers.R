@@ -19,10 +19,10 @@
 #'   subsets will be used. This argument is primarily useful, if evaluation of 
 #'   all subsets is infeasible for some reason.
 #' @param folds Determines how the subsets are being constructed.
-#'   Possible values are \code{NULL} (the default), \code{"stratified"},
-#'   \code{"balanced"}, or \code{"loo"}. May also be a vector of length
-#'   equal to the number of observations in the data. Alters the way
-#'   \code{group} is handled. More information is provided in the 'Details'
+#'   Possible values are \code{NULL} (the default), \code{"grouped"},
+#'   \code{"stratified"}, \code{"balanced"}, or \code{"loo"}. May also be a
+#'   vector of length equal to the number of observations in the data. Alters
+#'   the way \code{group} is handled. More information is provided in the 'Details'
 #'   section.
 #' @param group Optional name of a grouping variable or factor in the model.
 #'   What exactly is done with this variable depends on argument \code{folds}.
@@ -55,6 +55,9 @@
 #'   \item If \code{folds} is \code{NULL} but \code{group} is specified, the 
 #'   data is split up into subsets, each time omitting all observations of one 
 #'   of the factor levels, while ignoring argument \code{K}. 
+#'   \item If \code{folds = "grouped"} entire groups are included or excluded
+#'   from subsets by \code{group} using
+#'   \code{\link[loo:kfold-helpers]{loo::kfold_split_grouped}}.
 #'   \item If \code{folds = "stratified"} the subsets are stratified after 
 #'   \code{group} using \code{\link[loo:kfold-helpers]{loo::kfold_split_stratified}}.
 #'   \item If \code{folds = "balanced"} the subsets are balanced by
@@ -127,7 +130,7 @@ kfold_internal <- function(x, K = 10, Ksub = NULL, folds = NULL,
       message("Setting 'K' to the number of levels of '", group, "' (", K, ")")
     }
   } else if (is.character(folds) && length(folds) == 1L) {
-    opts <- c("stratified", "balanced", "loo")
+    opts <- c("grouped", "stratified", "balanced", "loo")
     fold_type <- match.arg(folds, opts)
     if (fold_type == "loo") {
       folds <- seq_len(N)
@@ -143,6 +146,11 @@ kfold_internal <- function(x, K = 10, Ksub = NULL, folds = NULL,
         stop2("Argument 'group' is required for balanced folds.")
       }
       folds <- loo::kfold_split_balanced(K, gvar)
+    } else if (fold_type == "grouped") {
+      if (is.null(group)) {
+        stop2("Argument 'group' is required for grouped folds.")
+      }
+      folds <- loo::kfold_split_grouped(K, gvar)
     }
   } else {
     fold_type <- "custom"
@@ -202,18 +210,34 @@ kfold_internal <- function(x, K = 10, Ksub = NULL, folds = NULL,
   elpds <- ulapply(lppds, function(x) apply(x, 2, log_mean_exp))
   # make sure elpds are put back in the right order
   elpds <- elpds[order(unlist(obs_order))]
-  elpd_kfold <- sum(elpds)
-  se_elpd_kfold <- sqrt(length(elpds) * var(elpds))
-  rnames <- c("elpd_kfold", "p_kfold", "kfoldic")
-  cnames <- c("Estimate", "SE")
-  estimates <- matrix(nrow = 3, ncol = 2, dimnames = list(rnames, cnames))
-  estimates[1, ] <- c(elpd_kfold, se_elpd_kfold)
-  estimates[3, ] <- c(-2 * elpd_kfold, 2 * se_elpd_kfold)
-  out <- nlist(
-    estimates, pointwise = cbind(elpd_kfold = elpds),
-    model_name = deparse(substitute(x)), K, Ksub, 
-    group, folds, fold_type
-  )
+  if (fold_type == "grouped") {
+    elpds <- tapply(elpds, folds, sum)
+    elpd_kfold <- sum(elpds)
+    se_elpd_kfold <- sqrt(length(elpds) * var(elpds))
+    rnames <- c("elpd_kfold", "p_kfold", "kfoldic")
+    cnames <- c("Estimate", "SE")
+    estimates <- matrix(nrow = 3, ncol = 2, dimnames = list(rnames, cnames))
+    estimates[1, ] <- c(elpd_kfold, se_elpd_kfold)
+    estimates[3, ] <- c(-2 * elpd_kfold, 2 * se_elpd_kfold)
+    out <- brms:::nlist(
+      estimates, pointwise = cbind(elpd_kfold = elpds),
+      model_name = deparse(substitute(x)), K, Ksub, 
+      group, folds, fold_type
+    )
+  } else {
+    elpd_kfold <- sum(elpds)
+    se_elpd_kfold <- sqrt(length(elpds) * var(elpds))
+    rnames <- c("elpd_kfold", "p_kfold", "kfoldic")
+    cnames <- c("Estimate", "SE")
+    estimates <- matrix(nrow = 3, ncol = 2, dimnames = list(rnames, cnames))
+    estimates[1, ] <- c(elpd_kfold, se_elpd_kfold)
+    estimates[3, ] <- c(-2 * elpd_kfold, 2 * se_elpd_kfold)
+    out <- brms:::nlist(
+      estimates, pointwise = cbind(elpd_kfold = elpds),
+      model_name = deparse(substitute(x)), K, Ksub, 
+      group, folds, fold_type
+    )
+  }
   if (save_fits) {
     out$fits <- fits 
     out$data <- mf

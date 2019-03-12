@@ -38,10 +38,10 @@ subsets will be used. This argument is primarily useful, if evaluation of
 all subsets is infeasible for some reason.}
 
 \item{folds}{Determines how the subsets are being constructed.
-Possible values are \code{NULL} (the default), \code{"stratified"},
-\code{"balanced"}, or \code{"loo"}. May also be a vector of length
-equal to the number of observations in the data. Alters the way
-\code{group} is handled. More information is provided in the 'Details'
+Possible values are \code{NULL} (the default), \code{"grouped"},
+\code{"stratified"}, \code{"balanced"}, or \code{"loo"}. May also be a
+vector of length equal to the number of observations in the data. Alters
+the way \code{group} is handled. More information is provided in the 'Details'
 section.}
 
 \item{group}{Optional name of a grouping variable or factor in the model.
@@ -90,6 +90,9 @@ The \code{kfold} function performs exact \eqn{K}-fold
   \item If \code{folds} is \code{NULL} but \code{group} is specified, the 
   data is split up into subsets, each time omitting all observations of one 
   of the factor levels, while ignoring argument \code{K}. 
+  \item If \code{folds = "grouped"} entire groups are included or excluded
+  from subsets by \code{group} using
+  \code{\link[loo:kfold-helpers]{loo::kfold_split_grouped}}.
   \item If \code{folds = "stratified"} the subsets are stratified after 
   \code{group} using \code{\link[loo:kfold-helpers]{loo::kfold_split_stratified}}.
   \item If \code{folds = "balanced"} the subsets are balanced by
